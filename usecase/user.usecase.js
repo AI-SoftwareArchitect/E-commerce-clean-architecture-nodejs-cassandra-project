@@ -1,45 +1,45 @@
-const user = require('../entity/user.entity');
 const bcrypt = require('bcrypt');
-const { v4: uuidv4 } = require('uuid');
+const MailUseCase = require('./mail.usecase');
+const mailTransporter = require('../frameworks/mailTransporter'); // MailTransporter örneğinizin doğru yolunu kontrol edin
 
 class UserUseCase {
-    constructor(userRepository) {
-        this.userRepository = userRepository;
-    }
+  constructor(userRepository) {
+    this.userRepository = userRepository;
+    // MailUseCase’e mail transporter’ı enjekte ediyoruz.
+    this.mailSender = new MailUseCase(mailTransporter.getTransporter());
+  }
 
-    async signUpWithEmailAndPassword(user) {
-        const id = uuidv4();
-        const password = await bcrypt.hash(user.password, 10);
-        const user = User(
-            id,
-            user.name,
-            user.email,
-            password,
-            
-            
-        );
-        return this.userRepository.save(email,password);
+  async save(user) {
+    if (user.password) {
+      user.password = await bcrypt.hash(user.password, 10);
     }
+    user.isVerified = user.authProvider === 'google' ? true : false;
+    await this.userRepository.save(user);
+  }
 
-    async save(user) {
-        this.userRepository.save(user);
-    }
+  async sendVerificationEmail(email, token) {
+    await this.mailSender.sendVerificationEmail(email, token);
+  }
 
-    async update(userId, user) {
-        this.userRepository.update(userId, user);
-    }
+  async update(userId, user) {
+    await this.userRepository.update(userId, user);
+  }
 
-    async remove(userId) {
-        this.userRepository.remove(userId);
-    }
+  async remove(userId) {
+    await this.userRepository.remove(userId);
+  }
 
-    async findById(userId) {
-        return this.userRepository.findById(userId);
-    }
+  async findById(userId) {
+    return await this.userRepository.findById(userId);
+  }
 
-    async findAll() {
-        return this.userRepository.findAll();
-    }
+  async findByEmail(email) {
+    return await this.userRepository.findByEmail(email);
+  }
+
+  async findAll() {
+    return await this.userRepository.findAll();
+  }
 }
 
 module.exports = UserUseCase;
