@@ -9,10 +9,6 @@ class UserController {
     this.userUseCase = userUseCase;
   }
 
-  async verify(req, res) { 
-
-
-  }
     // Google ile giriş ya da kayıt fonksiyonu
     async loginOrSignupGoogle(req, res) {
         const { idToken } = req.body;
@@ -45,6 +41,8 @@ class UserController {
             await this.userUseCase.save(user); // Kullanıcıyı veritabanına kaydet
           }
     
+
+          await this.userUseCase.updateRefreshToken(user.id, refreshToken);
           // Kullanıcıyı bulduktan sonra Access Token oluştur
           const accessToken = this.generateAccessToken(user);
           const refreshToken = this.generateRefreshToken(user);
@@ -127,7 +125,7 @@ class UserController {
         id: uuidv4(),
         name,
         email,
-        password: await bcrypt.hash(password, 10),
+        password: password,
         isVerified: false,
         authProvider: 'local',
         googleId: null,
@@ -248,35 +246,73 @@ async signup(req, res) {
       res.status(500).json({ error: 'Giriş işlemi sırasında bir hata oluştu' });
     }
   }
+
+  async verify(req, res) {
+    try {
+      const { token } = req.query;
+      if (!token) return res.status(400).json({ error: 'Token is required' });
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await this.userUseCase.findByEmail(decoded.email);
+      if (!user) return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+
+      user.isVerified = true;
+      await this.userUseCase.update(user.id, user);
+
+      res.status(200).json({ message: 'Email başarıyla doğrulandı' });
+    } catch (error) {
+      console.error('Verify error:', error);
+      res.status(400).json({ error: 'Geçersiz veya süresi dolmuş token' });
+    }
+}
+
   
   // Refresh token ile yeni access token alma
   async refreshToken(req, res) {
     const refreshToken = req.cookies.refreshToken;
-  
     if (!refreshToken) {
-      return res.status(401).json({ error: 'Refresh token bulunamadı' });
+        return res.status(401).json({ error: 'Refresh token bulunamadı' });
     }
-  
+
     try {
-      // Refresh token'ı doğrula
-      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-      
-      // Kullanıcıyı bul
-      const user = await this.userUseCase.findById(decoded.id);
-      if (!user) {
-        return res.status(401).json({ error: 'Geçersiz token' });
-      }
-  
-      // Yeni access token oluştur
-      const accessToken = this.generateAccessToken(user);
-      
-      res.status(200).json({ accessToken });
-  
+        // Refresh Token'ı doğrula
+        const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+        
+        // Kullanıcının veritabanında kayıtlı olup olmadığını kontrol et
+        const user = await this.userUseCase.findById(decoded.id);
+        if (!user) {
+            return res.status(401).json({ error: 'Geçersiz token' });
+        }
+
+        // Burada veritabanında refresh token'ı saklayıp doğrulamak gerekiyor!
+        const isValid = await this.userUseCase.isValidRefreshToken(user.id, refreshToken);
+        if (!isValid) {
+            return res.status(403).json({ error: 'Geçersiz veya eski Refresh Token' });
+        }
+
+        // Yeni Access ve Refresh Token üret
+        const newAccessToken = this.generateAccessToken(user);
+        const newRefreshToken = this.generateRefreshToken(user);
+
+        // Refresh Token'ı güncelle (Eski token'ı sil, yeni token'ı kaydet)
+        await this.userUseCase.updateRefreshToken(user.id, newRefreshToken);
+
+        // Yeni Refresh Token'ı güvenli cookie olarak ayarla
+        res.cookie('refreshToken', newRefreshToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'Strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 gün
+        });
+
+        res.status(200).json({ accessToken: newAccessToken });
+
     } catch (error) {
-      console.error('Refresh token error:', error);
-      res.status(401).json({ error: 'Geçersiz refresh token' });
+        console.error('Refresh token error:', error);
+        res.status(401).json({ error: 'Geçersiz veya süresi dolmuş token' });
     }
   }
+
 
 }
 
