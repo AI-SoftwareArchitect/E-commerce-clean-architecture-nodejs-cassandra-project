@@ -17,7 +17,7 @@ Router.put('/update/:id', userController.update.bind(userController));
 Router.delete('/remove/:id', userController.remove.bind(userController));
 Router.get('/findById/:id', userController.findById.bind(userController));
 Router.get('/findAll', userController.findAll.bind(userController));
-Router.post('/login-or-signup/google', userController.loginOrSignupGoogle.bind(userController));
+//Router.post('/login-or-signup/google', userController.loginOrSignupGoogle.bind(userController));
 Router.post('/signup', userController.signup.bind(userController));
 Router.post('/login', userController.login.bind(userController));
 Router.post('/refresh-token', userController.refreshToken.bind(userController));

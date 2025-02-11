@@ -1,67 +1,11 @@
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { OAuth2Client } = require('google-auth-library');
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 class UserController {
   constructor(userUseCase) {
     this.userUseCase = userUseCase;
   }
-
-    // Google ile giriş ya da kayıt fonksiyonu
-    async loginOrSignupGoogle(req, res) {
-        const { idToken } = req.body;
-    
-        try {
-          // Google ID Token'ını doğrula
-          const ticket = await googleClient.verifyIdToken({
-            idToken,
-            audience: process.env.GOOGLE_CLIENT_ID, // Google Client ID'nizi burada kullanın
-          });
-    
-          const payload = ticket.getPayload(); // Kullanıcı bilgileri
-          const email = payload.email;
-          const googleId = payload.sub;
-    
-          let user = await this.userUseCase.findByEmail(email);
-    
-          if (!user) {
-            // Kullanıcı yoksa yeni kullanıcı oluştur
-            user = {
-              id: uuidv4(),
-              name: payload.name,
-              email,
-              password: null, // Google ile şifre gereksiz
-              isVerified: true,
-              authProvider: 'google',
-              googleId,
-              createdAt: new Date()
-            };
-            await this.userUseCase.save(user); // Kullanıcıyı veritabanına kaydet
-          }
-    
-
-          await this.userUseCase.updateRefreshToken(user.id, refreshToken);
-          // Kullanıcıyı bulduktan sonra Access Token oluştur
-          const accessToken = this.generateAccessToken(user);
-          const refreshToken = this.generateRefreshToken(user);
-    
-          // Refresh Token'ı Secure cookie olarak gönder
-          res.cookie('refreshToken', refreshToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'Strict',
-            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 gün
-          });
-    
-          res.status(200).json({ accessToken });
-    
-        } catch (error) {
-          console.error('Google login/signup error:', error);
-          res.status(500).json({ error: 'Google ile giriş veya kayıt sırasında bir hata oluştu' });
-        }
-      }
 
   generateAccessToken(user) {
     return jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '15m' });

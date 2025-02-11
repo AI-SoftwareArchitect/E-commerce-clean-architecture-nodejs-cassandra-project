@@ -6,13 +6,11 @@ class VerifyController {
 
   async verify(req, res) {
     try {
-      // 'token' query parametresini al
       const token = req.query.token;
 
       if (!token) {
         return res.status(400).json({ error: 'Token is required' });
       }
-
 
       const htmlContent = verifyHtml(token);
 
