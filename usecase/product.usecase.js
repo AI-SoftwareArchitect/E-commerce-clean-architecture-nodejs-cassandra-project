@@ -1,22 +1,32 @@
 const Product = require('../entity/product.entity');
 
 class ProductUseCase {
-    constructor(productRepository) {
+    constructor(productRepository, redis) {
         this.productRepository = productRepository;
+        this.cache = redis;
     }
 
     async createProduct(data) {
-        // Data'nın Product entity'sine dönüşümü
         const product = new Product(data);
+        await this.#setProductWithPipeline(product.id, product);
         return await this.productRepository.createProduct(product);
     }
 
-    async getAllProducts() {
+    async getAllProducts() { 
         return await this.productRepository.getAllProducts();
     }
 
     async getProductById(id) {
-        return await this.productRepository.getProductById(id);
+        const cachedProduct = await this.cache.hget(`product:${id}`);
+        if (cachedProduct) {
+            return JSON.parse(cachedProduct);
+        }
+        
+        const product = await this.productRepository.getProductById(id);
+        if (product) {
+            await this.#setProductWithPipeline(product.id, product);
+        }
+        return product;
     }
 
     async getProductsBySellerId(sellerId) {
@@ -27,14 +37,29 @@ class ProductUseCase {
         const product = await this.getProductById(id);
         if (!product) throw new Error("Product not found");
 
-        // Esnek güncelleme: gelen data ile varolan ürünü güncelle
         Object.assign(product, data);
         product.updatedAt = new Date();
-        return await this.productRepository.updateProduct(product);
+
+        const updatedProduct = await this.productRepository.updateProduct(product);
+        if (updatedProduct) {
+            await this.#setProductWithPipeline(id, updatedProduct);
+        }
+        return updatedProduct;
     }
 
     async deleteProduct(id) {
-        return await this.productRepository.deleteProduct(id);
+        const deleted = await this.productRepository.deleteProduct(id);
+        if (deleted) {
+            await this.cache.del(`product:${id}`);
+        }
+        return deleted;
+    }
+
+    async #setProductWithPipeline(id, data) {
+        const pipeline = this.cache.pipeline();
+        pipeline.hset(`product:${id}`, JSON.stringify(data));
+        pipeline.expire(`product:${id}`, 600);
+        await pipeline.exec();
     }
 }
 
