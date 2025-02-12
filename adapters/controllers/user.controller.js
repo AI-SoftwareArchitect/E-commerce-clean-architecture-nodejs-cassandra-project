@@ -120,9 +120,7 @@ async signup(req, res) {
       // Doğrulama emaili gönder
       await this.userUseCase.sendVerificationEmail(email, verificationToken);
   
-      res.status(201).json({ 
-        message: 'Kullanıcı başarıyla oluşturuldu. Lütfen email adresinizi doğrulayın.' 
-      });
+      res.status(201).redirect(`${process.env.APP_URL}/verify/verify-email?token=${token}`);
   
     } catch (error) {
       console.error('Signup error:', error);
@@ -138,7 +136,6 @@ async signup(req, res) {
       // Kullanıcıyı bul
       const user = await this.userUseCase.findByEmail(email);
       
-      // Kullanıcı kontrolü
       if (!user) {
         return res.status(401).json({ error: 'Email veya şifre hatalı' });
       }
@@ -158,37 +155,40 @@ async signup(req, res) {
   
       // Email doğrulama kontrolü
       if (!user.isVerified) {
-        return res.status(403).json({ 
-          error: 'Lütfen email adresinizi doğrulayın' 
-        });
+        return res.status(403).json({ error: 'Lütfen email adresinizi doğrulayın' });
       }
   
-      // Token oluştur
-      const accessToken = this.generateAccessToken(user);
-      const refreshToken = this.generateRefreshToken(user);
+      // Session’a kullanıcı verilerini sakla
+      req.session.user = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        profileImage: 'default_profile.png' // Varsayılan profil resmi, ileride güncelleyebilirsin
+      };
+
+      // İstersen access token da oluşturup session'a ekleyebilirsin
+      req.session.accessToken = this.generateAccessToken(user);
   
-      // Refresh token'ı güvenli cookie olarak gönder
-      res.cookie('refreshToken', refreshToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 gün
-      });
-  
-      // Access token'ı response body'de gönder
       res.status(200).json({ 
-        accessToken,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email
-        }
+        message: 'Giriş başarılı',
+        user: req.session.user,
+        accessToken: req.session.accessToken
       });
   
     } catch (error) {
       console.error('Login error:', error);
       res.status(500).json({ error: 'Giriş işlemi sırasında bir hata oluştu' });
     }
+  }
+
+  // Oturumu sonlandırmak için logout metodu
+  async logout(req, res) {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ error: 'Çıkış yapılamadı' });
+      }
+      res.status(200).json({ message: 'Çıkış başarılı' });
+    });
   }
 
   async verify(req, res) {

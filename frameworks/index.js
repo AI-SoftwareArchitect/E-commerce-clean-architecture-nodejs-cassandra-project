@@ -1,14 +1,31 @@
 const express = require('express');
 const cors = require('cors');
+const session = require('express-session');
 const userRouter = require('../routes/user.route');
 const verifyRoutes = require('../routes/verify.route'); 
 const productRouter = require('../routes/product.route'); 
 const sellerRouter = require('../routes/seller.route');
 
+const session = require('express-session');
+
+const sessionSecret = "gSmZlRw7Vt2AWrWlj2TVStlulQhLqor4";
+
 const app = express();
 const port = 3000;
 
 app.use(express.static('content/product_images'));
+
+app.use(session({
+  secret: 'süperGizliAnahtar', // Değiştirmeyi unutma!
+  resave: false,
+  saveUninitialized: false,
+  cookie: { 
+    secure: false, // Prod ortamında true yapmayı unutma (HTTPS şart)
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 gün
+  }
+}));
+
+
 
 // CORS Middleware should be defined before any routes
 app.use(cors({
